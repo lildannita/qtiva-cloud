@@ -60,15 +60,18 @@ func RegisterSeedUserCommand(root *cobra.Command) {
 				return err
 			}
 
-			var oldAdminID string
-			var newAdminID string
-			var clientID string
+			var (
+				oldAdminID    string
+				oldAdminEmail string
+				newAdminID    string
+				clientID      string
+			)
 
 			err = dbx.WithTx(ctx, db, func(tx *sql.Tx) error {
 				// Находим активного админа, если есть
 				err := tx.QueryRowContext(ctx,
-					`SELECT id FROM users WHERE role='admin' AND deleted_at IS NULL LIMIT 1`,
-				).Scan(&oldAdminID)
+					`SELECT id, email FROM users WHERE role='admin' AND deleted_at IS NULL LIMIT 1`,
+				).Scan(&oldAdminID, &oldAdminEmail)
 
 				if err != nil && !errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("seed-admin: select admin: %w", err)
@@ -78,8 +81,32 @@ func RegisterSeedUserCommand(root *cobra.Command) {
 					return errors.New("seed-admin: admin уже существует, используй --replace чтобы заменить")
 				}
 
-				// Если replace=true и админ есть — помечаем его удалённым
+				// Если replace=true и админ есть
 				if err == nil && replace {
+					// Тот же email → просто обновляем пароль
+					if strings.EqualFold(strings.TrimSpace(oldAdminEmail), email) {
+						hash, e := authx.HashPassword(password)
+						if e != nil {
+							return e
+						}
+
+						if _, e := tx.ExecContext(ctx,
+							`UPDATE users SET password_hash=$1, updated_at=now() WHERE id=$2`,
+							hash, oldAdminID,
+						); e != nil {
+							return fmt.Errorf("seed-admin: update admin password: %w", e)
+						}
+
+						newAdminID = oldAdminID
+						_ = tx.QueryRowContext(ctx,
+							`SELECT client_id FROM users WHERE id=$1`,
+							oldAdminID,
+						).Scan(&clientID)
+
+						return nil
+					}
+
+					// Email другой → помечаем старого удалённым
 					if _, err := tx.ExecContext(ctx,
 						`UPDATE users SET deleted_at=now(), updated_at=now() WHERE id=$1`,
 						oldAdminID,
@@ -89,7 +116,10 @@ func RegisterSeedUserCommand(root *cobra.Command) {
 				}
 
 				// Берём первый client, либо создаём базовый
-				e := tx.QueryRowContext(ctx, `SELECT id FROM clients ORDER BY created_at ASC LIMIT 1`).Scan(&clientID)
+				e := tx.QueryRowContext(ctx,
+					`SELECT id FROM clients ORDER BY created_at ASC LIMIT 1`,
+				).Scan(&clientID)
+
 				if e != nil {
 					if !errors.Is(e, sql.ErrNoRows) {
 						return fmt.Errorf("seed-admin: select client: %w", e)
@@ -99,7 +129,8 @@ func RegisterSeedUserCommand(root *cobra.Command) {
 						return e
 					}
 					if _, e := tx.ExecContext(ctx,
-						`INSERT INTO clients (id, name, network_allowed, concurrency_limit) VALUES ($1,$2,$3,$4)`,
+						`INSERT INTO clients (id, name, network_allowed, concurrency_limit)
+						 VALUES ($1,$2,$3,$4)`,
 						newClientID, "System", false, 1,
 					); e != nil {
 						return fmt.Errorf("seed-admin: insert client: %w", e)
@@ -118,7 +149,8 @@ func RegisterSeedUserCommand(root *cobra.Command) {
 				}
 
 				if _, e := tx.ExecContext(ctx,
-					`INSERT INTO users (id, client_id, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)`,
+					`INSERT INTO users (id, client_id, email, password_hash, role)
+					 VALUES ($1,$2,$3,$4,$5)`,
 					id, clientID, email, hash, "admin",
 				); e != nil {
 					return fmt.Errorf("seed-admin: insert admin: %w", e)
@@ -131,12 +163,27 @@ func RegisterSeedUserCommand(root *cobra.Command) {
 				return err
 			}
 
-			if oldAdminID != "" && replace {
-				cmd.Printf("admin заменён: old=%s new=%s client_id=%s email=%s\n", oldAdminID, newAdminID, clientID, email)
+			// Сообщения
+			if replace && oldAdminID != "" && newAdminID == oldAdminID {
+				cmd.Printf(
+					"admin пароль обновлён: user_id=%s client_id=%s email=%s\n",
+					newAdminID, clientID, email,
+				)
 				return nil
 			}
 
-			cmd.Printf("admin создан: user_id=%s client_id=%s email=%s\n", newAdminID, clientID, email)
+			if oldAdminID != "" && replace {
+				cmd.Printf(
+					"admin заменён: old=%s new=%s client_id=%s email=%s\n",
+					oldAdminID, newAdminID, clientID, email,
+				)
+				return nil
+			}
+
+			cmd.Printf(
+				"admin создан: user_id=%s client_id=%s email=%s\n",
+				newAdminID, clientID, email,
+			)
 			return nil
 		},
 	}
