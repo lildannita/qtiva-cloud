@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// RunHTTPServer запускает HTTP-сервер и корректно завершает его по SIGINT/SIGTERM.
+// Запускает HTTP-сервер и корректно завершает его по SIGINT/SIGTERM
 func RunHTTPServer(addr string, handler http.Handler, shutdownTimeout time.Duration) error {
 	srv := &http.Server{
 		Addr:              addr,

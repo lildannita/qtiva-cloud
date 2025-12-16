@@ -11,9 +11,8 @@ fi
 
 mkdir -p bin
 
-LDFLAGS="-X github.com/lildannita/qtiva-cloud/internal/buildinfo.Version=${VERSION} -X github.com/lildannita/qtiva-cloud/internal/buildinfo.Commit=${COMMIT}"
+LDFLAGS="-X github.com/lildannita/qtiva-cloud/internal/buildinfo.Commit=${COMMIT}"
 
-echo "Сборка: version=${VERSION} commit=${COMMIT}"
 go build -ldflags "${LDFLAGS}" -o bin/qtiva-manager ./cmd/qtiva-manager
 go build -ldflags "${LDFLAGS}" -o bin/qtiva-agent   ./cmd/qtiva-agent
 echo "Бинарники собраны и лежат в ./bin"
