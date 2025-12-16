@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${VERSION:-dev}"
 COMMIT="none"
 
 if command -v git >/dev/null 2>&1; then
