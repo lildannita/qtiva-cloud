@@ -14,13 +14,6 @@ import (
 	"github.com/lildannita/qtiva-cloud/internal/httpx"
 )
 
-type healthResponse struct {
-	Status  string `json:"status"`
-	Service string `json:"service"`
-	Version string `json:"version,omitempty"`
-	Commit  string `json:"commit,omitempty"`
-}
-
 func main() {
 	log.SetFlags(log.LstdFlags | log.LUTC)
 
@@ -56,7 +49,7 @@ func main() {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(healthResponse{
+				_ = json.NewEncoder(w).Encode(httpx.HealthResponse{
 					Status:  "ok",
 					Service: "qtiva-agent",
 					Version: buildinfo.Version,
