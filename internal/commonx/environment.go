@@ -41,6 +41,19 @@ func RequireInt(key string) (int, error) {
 	return n, nil
 }
 
+// Читает обязательную int64-переменную окружения
+func RequireInt64(key string) (int64, error) {
+	s, err := RequireString(key)
+	if err != nil {
+		return 0, err
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("переменная %s должна быть int64: %w", key, err)
+	}
+	return n, nil
+}
+
 // Читает обязательную duration-переменную окружения (например, 30s, 5m)
 func RequireDuration(key string) (time.Duration, error) {
 	s, err := RequireString(key)

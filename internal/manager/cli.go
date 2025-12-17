@@ -58,6 +58,7 @@ func RegisterServeCommand(root *cobra.Command) {
 				JWT:     jwtCfg,
 				MaxJSON: 1 << 20,
 			})
+			RegisterArtifactRoutes(mux, ArtifactsAPI{DB: db}, db, jwtCfg)
 			handler := httpx.WithRequestID(mux)
 
 			return httpx.RunHTTPServer(httpAddr, handler, 10*time.Second)
