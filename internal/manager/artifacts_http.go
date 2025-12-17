@@ -14,21 +14,25 @@ import (
 	"github.com/lildannita/qtiva-cloud/internal/commonx"
 	"github.com/lildannita/qtiva-cloud/internal/httpx"
 	"github.com/lildannita/qtiva-cloud/internal/idgen"
-	"github.com/lildannita/qtiva-cloud/internal/jwtx"
 )
 
 type ArtifactsAPI struct {
 	DB *sql.DB
 }
 
-func RegisterArtifactRoutes(mux *http.ServeMux, api ArtifactsAPI, db *sql.DB, jwtCfg jwtx.Config) {
-	mux.Handle("/artifacts", httpx.RequireAuth(db, jwtCfg, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func RegisterArtifactRoutes(mux *http.ServeMux, api ArtifactsAPI) {
+	mux.Handle("/artifacts", ArtifactUploadHandler(api))
+}
+
+// Возвращает handler для загрузки артефакта
+func ArtifactUploadHandler(api ArtifactsAPI) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		handleUploadArtifact(w, r, api)
-	})))
+	})
 }
 
 func handleUploadArtifact(w http.ResponseWriter, r *http.Request, api ArtifactsAPI) {
