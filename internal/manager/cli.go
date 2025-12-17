@@ -8,6 +8,7 @@ import (
 	"github.com/lildannita/qtiva-cloud/internal/commonx"
 	"github.com/lildannita/qtiva-cloud/internal/dbx"
 	"github.com/lildannita/qtiva-cloud/internal/httpx"
+	"github.com/lildannita/qtiva-cloud/internal/jwtx"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,11 @@ func RegisterServeCommand(root *cobra.Command) {
 					return err
 				}
 				httpAddr = v
+			}
+
+			jwtCfg, err := jwtx.LoadConfigFromEnv()
+			if err != nil {
+				return err
 			}
 
 			db, pingTimeout, err := dbx.OpenFromEnv()
@@ -47,8 +53,14 @@ func RegisterServeCommand(root *cobra.Command) {
 				w.WriteHeader(http.StatusOK)
 				_, _ = w.Write([]byte("ok"))
 			})
+			RegisterAuthRoutes(mux, AuthAPI{
+				DB:      db,
+				JWT:     jwtCfg,
+				MaxJSON: 1 << 20,
+			})
+			handler := httpx.WithRequestID(mux)
 
-			return httpx.RunHTTPServer(httpAddr, mux, 10*time.Second)
+			return httpx.RunHTTPServer(httpAddr, handler, 10*time.Second)
 		},
 	}
 	serveCmd.Flags().StringVar(&httpAddr, "http-addr", "", "Адрес для HTTP (например, :8080)")
