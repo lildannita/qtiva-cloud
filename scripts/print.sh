@@ -15,7 +15,22 @@ EXCLUDE_FILES=(
 
 EXCLUDE_DIRS=(
   "bin"
+  "docs"
   ".git"
+)
+
+EXCLUDE_EXTS=(
+  "png"
+  "jpg"
+  "jpeg"
+  "gif"
+  "svg"
+  "ico"
+  "pdf"
+  "zip"
+  "tar"
+  "gz"
+  "md"
 )
 
 # Сборка условий исключений для find (в относительных путях: ./...)
@@ -29,6 +44,11 @@ done
 # исключаем конкретные файлы в корне (./file)
 for f in "${EXCLUDE_FILES[@]}"; do
   find_excludes+=( -o -path "./$f" )
+done
+
+# исключаем файлы по расширениям
+for ext in "${EXCLUDE_EXTS[@]}"; do
+  find_excludes+=( -o -name "*.$ext" )
 done
 
 find . \
