@@ -10,8 +10,10 @@ import (
 	"github.com/lildannita/qtiva-cloud/internal/jwtx"
 )
 
+// Ключ для хранения данных пользователя в контексте запроса
 type ctxKeyUser struct{}
 
+// Данные авторизованного пользователя
 type AuthedUser struct {
 	UserID   string
 	ClientID string
@@ -19,6 +21,8 @@ type AuthedUser struct {
 	Role     string
 }
 
+// Проверяет JWT токен и загружает данные пользователя
+// Если токен невалидный или пользователь не найден — возвращает 401
 func RequireAuth(db *sql.DB, jwtCfg jwtx.Config, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := strings.TrimSpace(r.Header.Get("Authorization"))
@@ -57,6 +61,26 @@ func RequireAuth(db *sql.DB, jwtCfg jwtx.Config, next http.Handler) http.Handler
 	})
 }
 
+// Проверяет, что пользователь имеет роль admin
+// Должен использоваться ПОСЛЕ RequireAuth
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, ok := UserFromContext(r.Context())
+		if !ok {
+			WriteError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Требуется авторизация")
+			return
+		}
+
+		if u.Role != "admin" {
+			WriteError(w, r, http.StatusForbidden, "FORBIDDEN", "Требуются права администратора")
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// Извлекает данные пользователя из контекста запроса
 func UserFromContext(ctx context.Context) (AuthedUser, bool) {
 	v, ok := ctx.Value(ctxKeyUser{}).(AuthedUser)
 	return v, ok
