@@ -1,11 +1,16 @@
 package manager
 
 import (
+	"context"
 	"database/sql"
+	"io"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lildannita/qtiva-cloud/internal/commonx"
 	"github.com/lildannita/qtiva-cloud/internal/httpx"
 	"github.com/lildannita/qtiva-cloud/internal/idgen"
 )
@@ -28,6 +33,7 @@ func RegisterRunRoutes(mux *http.ServeMux, api RunsAPI, authMiddleware func(http
 	})))
 
 	// GET /runs/{id} — получение статуса прогона
+	// GET /runs/{id}/log — скачивание лога
 	mux.Handle("/runs/", authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Извлекаем run_id из пути: /runs/run_xxx или /runs/run_xxx/log
 		path := strings.TrimPrefix(r.URL.Path, "/runs/")
@@ -76,7 +82,8 @@ type runCreateResponse struct {
 	Status string `json:"status"`
 }
 
-// Создаёт новый прогон и ставит задачу в очередь
+// Создаёт новый прогон и ставит задачу в очередь.
+// Сразу устанавливает delete_after для автоочистки через дефолтный TTL.
 func handleCreateRun(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	var req runRequest
 	if err := httpx.DecodeJSON(r, &req, 1<<20); err != nil {
@@ -147,7 +154,12 @@ func handleCreateRun(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		return
 	}
 
-	// Начинаем транзакцию
+	// Читаем дефолтный TTL для прогонов
+	defaultTTL, err := commonx.RequireDuration("QTIVA_RUN_DEFAULT_TTL")
+	if err != nil {
+		defaultTTL = 3 * time.Hour // fallback
+	}
+
 	tx, err := db.BeginTx(r.Context(), nil)
 	if err != nil {
 		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось начать транзакцию")
@@ -155,11 +167,11 @@ func handleCreateRun(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Создаём запись прогона
+	// Создаём прогон с delete_after = now() + defaultTTL
 	_, err = tx.ExecContext(r.Context(),
-		`INSERT INTO runs (id, client_id, user_id, artifact_id, status, ack_mode, os, display, qt_version)
-		 VALUES ($1, $2, $3, $4, 'pending', 'auto', $5, $6, $7)`,
-		runID, u.ClientID, u.UserID, req.ArtifactID, req.OS, req.Display, req.QtVersion,
+		`INSERT INTO runs (id, client_id, user_id, artifact_id, status, ack_mode, os, display, qt_version, delete_after)
+		 VALUES ($1, $2, $3, $4, 'pending', 'auto', $5, $6, $7, now() + $8::interval)`,
+		runID, u.ClientID, u.UserID, req.ArtifactID, req.OS, req.Display, req.QtVersion, defaultTTL.String(),
 	)
 	if err != nil {
 		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось создать прогон")
@@ -301,12 +313,103 @@ func handleGetRun(w http.ResponseWriter, r *http.Request, db *sql.DB, runID stri
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 
-// === GET /runs/{id}/log (заглушка) ===
+// === GET /runs/{id}/log ===
 
-// Выдаёт лог прогона
+// Выдаёт лог прогона и сокращает TTL при полной передаче.
+// Range-запросы игнорируются — засчитывается только полное скачивание.
 func handleGetRunLog(w http.ResponseWriter, r *http.Request, db *sql.DB, runID string) {
-	// TODO: реализовать
-	httpx.WriteError(w, r, http.StatusNotImplemented, "NOT_IMPLEMENTED", "Скачивание лога будет реализовано в следующем шаге")
+	u, ok := httpx.UserFromContext(r.Context())
+	if !ok {
+		httpx.WriteError(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Требуется авторизация")
+		return
+	}
+
+	var (
+		status   string
+		logPath  sql.NullString
+		clientID string
+	)
+
+	err := db.QueryRowContext(r.Context(),
+		`SELECT status, log_path, client_id
+		 FROM runs
+		 WHERE id = $1 AND deleted_at IS NULL`,
+		runID,
+	).Scan(&status, &logPath, &clientID)
+
+	if err == sql.ErrNoRows {
+		httpx.WriteError(w, r, http.StatusNotFound, "NOT_FOUND", "Прогон не найден")
+		return
+	}
+	if err != nil {
+		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Ошибка получения прогона")
+		return
+	}
+
+	if clientID != u.ClientID {
+		httpx.WriteError(w, r, http.StatusForbidden, "FORBIDDEN", "Нет доступа к этому прогону")
+		return
+	}
+
+	if status != "passed" && status != "failed" && status != "timeout" && status != "error" {
+		httpx.WriteError(w, r, http.StatusConflict, "RUN_NOT_FINISHED", "Прогон ещё не завершён")
+		return
+	}
+
+	if !logPath.Valid || logPath.String == "" {
+		httpx.WriteError(w, r, http.StatusNotFound, "LOG_NOT_FOUND", "Лог не найден")
+		return
+	}
+
+	file, err := os.Open(logPath.String)
+	if err != nil {
+		if os.IsNotExist(err) {
+			httpx.WriteError(w, r, http.StatusNotFound, "LOG_NOT_FOUND", "Файл лога не существует")
+			return
+		}
+		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось открыть файл лога")
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		httpx.WriteError(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Не удалось получить информацию о файле")
+		return
+	}
+	fileSize := stat.Size()
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Del("Accept-Ranges")
+
+	w.WriteHeader(http.StatusOK)
+
+	sentBytes, err := io.Copy(w, file)
+
+	// При полной передаче — фиксируем получение и сокращаем TTL
+	if err == nil && sentBytes == fileSize {
+		markLogAsReceived(r.Context(), db, runID)
+	}
+}
+
+// Помечает лог как полученный и сокращает время до удаления
+func markLogAsReceived(ctx context.Context, db *sql.DB, runID string) {
+	receivedTTL, err := commonx.RequireDuration("QTIVA_LOG_RECEIVED_TTL")
+	if err != nil {
+		receivedTTL = 10 * time.Minute // fallback
+	}
+
+	// received_at ставится один раз (COALESCE), но delete_after перезаписывается
+	// при каждом успешном скачивании (продлевает жизнь на 10 минут от последнего скачивания)
+	_, _ = db.ExecContext(ctx,
+		`UPDATE runs
+		 SET received_at = COALESCE(received_at, now()),
+		     delete_after = now() + $1::interval
+		 WHERE id = $2`,
+		receivedTTL.String(), runID,
+	)
 }
 
 // === Валидация ===
