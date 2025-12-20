@@ -6,14 +6,24 @@ import (
 	"strings"
 )
 
+// Manifest описывает содержимое manifest.json в артефакте
+// Обновлённая структура для работы с QtAda
 type Manifest struct {
-	RunCmd       string            `json:"run_cmd"`
-	TimeoutSec   int               `json:"timeout_sec"`
-	NeedsDisplay bool              `json:"needs_display"`
-	QtVersion    string            `json:"qt_version"`
-	OS           string            `json:"os"`
-	Display      string            `json:"display"`
-	Env          map[string]string `json:"env"`
+	// ConfigPath — путь к JSON-файлу конфигурации QtAda (обязательно)
+	ConfigPath string `json:"config_path"`
+
+	// Scripts — массив путей к тестовым сценариям QtAda (обязательно, минимум 1)
+	Scripts []string `json:"scripts"`
+
+	// Application — команда запуска тестируемого приложения с аргументами (обязательно)
+	// Пример: "./myapp --some-arg"
+	Application string `json:"application"`
+
+	// TimeoutSec — таймаут для каждого теста в секундах (опционально, по умолчанию 60)
+	TimeoutSec int `json:"timeout_sec"`
+
+	// Env — дополнительные переменные окружения (опционально)
+	Env map[string]string `json:"env"`
 }
 
 type ValidateConfig struct {
@@ -29,13 +39,37 @@ func ParseManifestJSON(b []byte) (Manifest, error) {
 	if err := dec.Decode(&m); err != nil {
 		return Manifest{}, fmt.Errorf("некорректный manifest.json: %w", err)
 	}
+
+	// Устанавливаем значение по умолчанию для timeout
+	if m.TimeoutSec <= 0 {
+		m.TimeoutSec = 60
+	}
+
 	return m, nil
 }
 
 func ValidateManifest(m Manifest, cfg ValidateConfig) error {
-	if strings.TrimSpace(m.RunCmd) == "" {
-		return fmt.Errorf("run_cmd обязателен")
+	// Проверка config_path
+	if strings.TrimSpace(m.ConfigPath) == "" {
+		return fmt.Errorf("config_path обязателен")
 	}
+
+	// Проверка scripts
+	if len(m.Scripts) == 0 {
+		return fmt.Errorf("scripts должен содержать минимум один путь к тестовому сценарию")
+	}
+	for i, script := range m.Scripts {
+		if strings.TrimSpace(script) == "" {
+			return fmt.Errorf("scripts[%d] не может быть пустым", i)
+		}
+	}
+
+	// Проверка application
+	if strings.TrimSpace(m.Application) == "" {
+		return fmt.Errorf("application обязателен")
+	}
+
+	// Проверка timeout
 	if m.TimeoutSec <= 0 {
 		return fmt.Errorf("timeout_sec должен быть > 0")
 	}
@@ -46,42 +80,5 @@ func ValidateManifest(m Manifest, cfg ValidateConfig) error {
 		return fmt.Errorf("timeout_sec превышает лимит %d", cfg.MaxTimeoutSec)
 	}
 
-	if !isAllowedOS(m.OS) {
-		return fmt.Errorf("os не поддерживается")
-	}
-	if !isAllowedDisplay(m.Display) {
-		return fmt.Errorf("display не поддерживается")
-	}
-	if !isAllowedQt(m.QtVersion) {
-		return fmt.Errorf("qt_version не поддерживается")
-	}
-
 	return nil
-}
-
-func isAllowedOS(v string) bool {
-	switch v {
-	case "manjaro", "ubuntu":
-		return true
-	default:
-		return false
-	}
-}
-
-func isAllowedDisplay(v string) bool {
-	switch v {
-	case "wayland", "x11":
-		return true
-	default:
-		return false
-	}
-}
-
-func isAllowedQt(v string) bool {
-	switch v {
-	case "5.15":
-		return true
-	default:
-		return false
-	}
 }

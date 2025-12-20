@@ -1,12 +1,44 @@
 # qtiva-runner:manjaro-qt5.15-wayland
 # Runner контейнер для запуска Qt GUI тестов в Manjaro с Wayland
+# Multi-stage build: сборка QtAda + финальный образ
 
+# ============================================================
+# Stage 1: Сборка QtAda
+# ============================================================
+FROM manjarolinux/base:latest AS builder
+
+# Устанавливаем build-зависимости
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+    # Build tools
+    base-devel \
+    cmake \
+    git \
+    # Qt 5.15 development
+    qt5-base \
+    qt5-declarative \
+    qt5-remoteobjects \
+    qt5-quickcontrols \
+    qt5-quickcontrols2 \
+    && \
+    pacman -Scc --noconfirm
+
+# Клонируем и собираем QtAda
+WORKDIR /build
+RUN git clone --branch dev_qtada_using --depth 1 https://github.com/lildannita/QtAda.git
+
+WORKDIR /build/QtAda
+RUN install.sh --only-cli --skip-symlink --skip-package-install
+
+# ============================================================
+# Stage 2: Финальный образ
+# ============================================================
 FROM manjarolinux/base:latest
 
 LABEL maintainer="qtiva-cloud"
-LABEL description="Qtiva Runner - Manjaro + Qt 5.15 + Wayland (headless Weston)"
+LABEL description="Qtiva Runner - Manjaro + Qt 5.15 + Wayland (headless Weston) + QtAda"
 
-# Обновляем систему и устанавливаем зависимости
+# Обновляем систему и устанавливаем runtime-зависимости
 RUN pacman -Syu --noconfirm && \
     pacman -S --noconfirm \
     # Базовые утилиты
@@ -24,6 +56,7 @@ RUN pacman -Syu --noconfirm && \
     qt5-graphicaleffects \
     qt5-wayland \
     qt5-xcb-private-headers \
+    qt5-remoteobjects \
     # Wayland compositor
     weston \
     wayland \
@@ -39,6 +72,11 @@ RUN pacman -Syu --noconfirm && \
     # Очистка кэша пакетов
     pacman -Scc --noconfirm && \
     rm -rf /var/cache/pacman/pkg/*
+
+# Копируем собранный QtAda из builder stage
+COPY --from=builder /build/QtAda/build/bin/qtada /usr/local/bin/qtada
+COPY --from=builder /build/QtAda/build/libs/libQtAda_*.so /usr/local/lib/
+RUN chmod +x /usr/local/bin/qtada && ldconfig
 
 # Создаём пользователя для запуска тестов
 RUN useradd -m -s /bin/bash qtiva && \

@@ -52,9 +52,10 @@ type RunParams struct {
 	ArtifactPath   string
 	ArtifactsDir   string
 	Image          string
-	TimeoutSec     int
+	TimeoutSec     int // Таймаут для контейнера (из QTIVA_MAX_TIMEOUT)
 	NetworkAllowed bool
-	Env            map[string]string
+	DisplayType    string            // Тип дисплея: "wayland" или "x11"
+	Env            map[string]string // Дополнительные переменные окружения из manifest
 }
 
 // RunResult результат выполнения контейнера
@@ -71,7 +72,7 @@ func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunRe
 	// Собираем переменные окружения
 	envList := []string{
 		fmt.Sprintf("QTIVA_RUN_ID=%s", params.RunID),
-		fmt.Sprintf("QTIVA_TIMEOUT_SEC=%d", params.TimeoutSec),
+		fmt.Sprintf("QTIVA_DISPLAY_TYPE=%s", params.DisplayType),
 	}
 	for k, v := range params.Env {
 		envList = append(envList, fmt.Sprintf("%s=%s", k, v))

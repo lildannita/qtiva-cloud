@@ -1,5 +1,5 @@
-# qtiva-runner:ubuntu-qt5.15-wayland
-# Runner контейнер для запуска Qt GUI тестов в Ubuntu с Wayland
+# qtiva-runner:ubuntu-qt5.15-x11
+# Runner контейнер для запуска Qt GUI тестов в Ubuntu с X11 (Xvfb)
 # Multi-stage build: сборка QtAda + финальный образ
 
 # ============================================================
@@ -37,7 +37,7 @@ RUN install.sh --only-cli --skip-symlink --skip-package-install
 FROM ubuntu:22.04
 
 LABEL maintainer="qtiva-cloud"
-LABEL description="Qtiva Runner - Ubuntu 22.04 + Qt 5.15 + Wayland (headless Weston) + QtAda"
+LABEL description="Qtiva Runner - Ubuntu 22.04 + Qt 5.15 + X11 (Xvfb) + QtAda"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -58,15 +58,25 @@ RUN apt-get update && apt-get install -y \
     libqt5quickcontrols2-5 \
     libqt5svg5 \
     libqt5remoteobjects5 \
+    libqt5x11extras5 \
     qml-module-qtquick2 \
     qml-module-qtquick-controls2 \
     qml-module-qtquick-window2 \
     qml-module-qtgraphicaleffects \
-    qtwayland5 \
-    # Wayland compositor
-    weston \
-    libwayland-client0 \
-    libwayland-server0 \
+    # X11
+    xvfb \
+    x11-xserver-utils \
+    libx11-6 \
+    libxcb1 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
     # Шрифты
     fonts-dejavu-core \
     # Mesa для software rendering

@@ -196,18 +196,21 @@ func (w *Worker) executeJob(ctx context.Context, job Job, run Run, artifactPath 
 		return
 	}
 
+	containerTimeoutSec := int(w.config.MaxTimeout.Seconds())
+
 	// Запускаем контейнер
 	params := RunParams{
 		RunID:          run.ID,
 		ArtifactPath:   artifactPath,
 		ArtifactsDir:   artifactsDir,
 		Image:          image,
-		TimeoutSec:     manifest.TimeoutSec,
+		TimeoutSec:     containerTimeoutSec,
 		NetworkAllowed: networkAllowed,
+		DisplayType:    run.Display,
 		Env:            manifest.Env,
 	}
 
-	log.Printf("[Worker %d] Запускаю контейнер для run %s (image: %s)", w.id, run.ID, image)
+	log.Printf("[Worker %d] Запускаю контейнер для run %s (image: %s, timeout: %ds)", w.id, run.ID, image, containerTimeoutSec)
 
 	result := w.docker.RunContainer(ctx, params)
 
