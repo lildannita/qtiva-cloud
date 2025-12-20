@@ -47,7 +47,7 @@ func RegisterRunRoutes(mux *http.ServeMux, api RunsAPI, authMiddleware func(http
 
 		// Проверяем, запрашивается ли лог
 		if len(parts) > 1 && parts[1] == "log" {
-			// GET /runs/{id}/log — будет реализовано в следующем шаге
+			// GET /runs/{id}/log
 			if r.Method == http.MethodGet {
 				handleGetRunLog(w, r, api.DB, runID)
 				return
@@ -157,7 +157,7 @@ func handleCreateRun(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Читаем дефолтный TTL для прогонов
 	defaultTTL, err := commonx.RequireDuration("QTIVA_RUN_DEFAULT_TTL")
 	if err != nil {
-		defaultTTL = 3 * time.Hour // fallback
+		defaultTTL = 3 * time.Hour
 	}
 
 	tx, err := db.BeginTx(r.Context(), nil)
@@ -167,7 +167,7 @@ func handleCreateRun(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Создаём прогон с delete_after = now() + defaultTTL
+	// Создаём прогон
 	_, err = tx.ExecContext(r.Context(),
 		`INSERT INTO runs (id, client_id, user_id, artifact_id, status, ack_mode, os, display, qt_version, delete_after)
 		 VALUES ($1, $2, $3, $4, 'pending', 'auto', $5, $6, $7, now() + $8::interval)`,
@@ -398,7 +398,7 @@ func handleGetRunLog(w http.ResponseWriter, r *http.Request, db *sql.DB, runID s
 func markLogAsReceived(ctx context.Context, db *sql.DB, runID string) {
 	receivedTTL, err := commonx.RequireDuration("QTIVA_LOG_RECEIVED_TTL")
 	if err != nil {
-		receivedTTL = 10 * time.Minute // fallback
+		receivedTTL = 10 * time.Minute
 	}
 
 	// received_at ставится один раз (COALESCE), но delete_after перезаписывается

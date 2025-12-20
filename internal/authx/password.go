@@ -6,7 +6,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Хеширует пароль bcrypt’ом
+// Хеширует пароль bcrypt'ом
 func HashPassword(password string) (string, error) {
 	const cost = 12
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)

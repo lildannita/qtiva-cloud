@@ -105,7 +105,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request, api AuthAPI) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Атомарно “потребляем” invite: увеличиваем used_count, проверяя ограничения
+	// Атомарно "потребляем" invite: увеличиваем used_count, проверяя ограничения
 	err = tx.QueryRowContext(r.Context(),
 		`UPDATE invites
 		 SET used_count = used_count + 1

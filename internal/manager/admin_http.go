@@ -2,8 +2,8 @@ package manager
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,7 +11,7 @@ import (
 	"github.com/lildannita/qtiva-cloud/internal/idgen"
 )
 
-// Cодержит зависимости для admin endpoints
+// Содержит зависимости для admin endpoints
 type AdminAPI struct {
 	DB      *sql.DB
 	MaxJSON int64 // Максимальный размер JSON в байтах
@@ -163,7 +163,7 @@ func handleUpdateClient(w http.ResponseWriter, r *http.Request, api AdminAPI, cl
 	argIdx := 1
 
 	if req.NetworkAllowed != nil {
-		updates = append(updates, "network_allowed = $"+string(rune('0'+argIdx)))
+		updates = append(updates, "network_allowed = $"+strconv.Itoa(argIdx))
 		args = append(args, *req.NetworkAllowed)
 		argIdx++
 	}
@@ -177,7 +177,7 @@ func handleUpdateClient(w http.ResponseWriter, r *http.Request, api AdminAPI, cl
 			httpx.WriteError(w, r, http.StatusBadRequest, "VALIDATION_ERROR", "concurrency_limit не может быть больше 10")
 			return
 		}
-		updates = append(updates, "concurrency_limit = $"+string(rune('0'+argIdx)))
+		updates = append(updates, "concurrency_limit = $"+strconv.Itoa(argIdx))
 		args = append(args, *req.ConcurrencyLimit)
 		argIdx++
 	}
@@ -189,11 +189,10 @@ func handleUpdateClient(w http.ResponseWriter, r *http.Request, api AdminAPI, cl
 
 	// Добавляем updated_at
 	updates = append(updates, "updated_at = now()")
-
 	// Добавляем client_id в конец аргументов
 	args = append(args, clientID)
 
-	query := "UPDATE clients SET " + strings.Join(updates, ", ") + " WHERE id = $" + string(rune('0'+argIdx))
+	query := "UPDATE clients SET " + strings.Join(updates, ", ") + " WHERE id = $" + strconv.Itoa(argIdx)
 
 	_, err = api.DB.ExecContext(r.Context(), query, args...)
 	if err != nil {
@@ -312,33 +311,33 @@ func handleCreateInvite(w http.ResponseWriter, r *http.Request, api AdminAPI) {
 	})
 }
 
-// === Вспомогательные функции ===
+// // === Вспомогательные функции ===
 
-// Строит SQL запрос для частичного обновления
-// Возвращает строку запроса и слайс аргументов
-func buildUpdateQuery(table string, idColumn string, id any, fields map[string]any) (string, []any, error) {
-	if len(fields) == 0 {
-		return "", nil, errors.New("нет полей для обновления")
-	}
+// // Строит SQL запрос для частичного обновления
+// // Возвращает строку запроса и слайс аргументов
+// func buildUpdateQuery(table string, idColumn string, id any, fields map[string]any) (string, []any, error) {
+// 	if len(fields) == 0 {
+// 		return "", nil, errors.New("нет полей для обновления")
+// 	}
 
-	var setClauses []string
-	var args []any
-	argIdx := 1
+// 	var setClauses []string
+// 	var args []any
+// 	argIdx := 1
 
-	for column, value := range fields {
-		setClauses = append(setClauses, column+" = $"+string(rune('0'+argIdx)))
-		args = append(args, value)
-		argIdx++
-	}
+// 	for column, value := range fields {
+// 		setClauses = append(setClauses, column+" = $"+string(rune('0'+argIdx)))
+// 		args = append(args, value)
+// 		argIdx++
+// 	}
 
-	// Добавляем updated_at
-	setClauses = append(setClauses, "updated_at = now()")
+// 	// Добавляем updated_at
+// 	setClauses = append(setClauses, "updated_at = now()")
 
-	// Добавляем ID в конец
-	args = append(args, id)
+// 	// Добавляем ID в конец
+// 	args = append(args, id)
 
-	query := "UPDATE " + table + " SET " + strings.Join(setClauses, ", ") +
-		" WHERE " + idColumn + " = $" + string(rune('0'+argIdx))
+// 	query := "UPDATE " + table + " SET " + strings.Join(setClauses, ", ") +
+// 		" WHERE " + idColumn + " = $" + string(rune('0'+argIdx))
 
-	return query, args, nil
-}
+// 	return query, args, nil
+// }

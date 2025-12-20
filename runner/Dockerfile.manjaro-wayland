@@ -1,0 +1,63 @@
+# qtiva-runner:manjaro-qt5.15-wayland
+# Runner контейнер для запуска Qt GUI тестов в Manjaro с Wayland
+
+FROM manjarolinux/base:latest
+
+LABEL maintainer="qtiva-cloud"
+LABEL description="Qtiva Runner - Manjaro + Qt 5.15 + Wayland (headless Weston)"
+
+# Обновляем систему и устанавливаем зависимости
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+    # Базовые утилиты
+    bash \
+    coreutils \
+    tar \
+    gzip \
+    jq \
+    # Qt 5.15 runtime
+    qt5-base \
+    qt5-declarative \
+    qt5-quickcontrols \
+    qt5-quickcontrols2 \
+    qt5-svg \
+    qt5-graphicaleffects \
+    qt5-wayland \
+    qt5-xcb-private-headers \
+    # Wayland compositor
+    weston \
+    wayland \
+    wayland-protocols \
+    # Шрифты
+    ttf-dejavu \
+    # Mesa для software rendering
+    mesa \
+    mesa-utils \
+    # D-Bus (некоторым Qt приложениям нужен)
+    dbus \
+    && \
+    # Очистка кэша пакетов
+    pacman -Scc --noconfirm && \
+    rm -rf /var/cache/pacman/pkg/*
+
+# Создаём пользователя для запуска тестов
+RUN useradd -m -s /bin/bash qtiva && \
+    mkdir -p /work /artifacts /input && \
+    chown -R qtiva:qtiva /work /artifacts
+
+# Копируем runner скрипт
+COPY runner.sh /qtiva/runner
+RUN chmod +x /qtiva/runner
+
+# Настройка окружения
+ENV HOME=/home/qtiva
+ENV USER=qtiva
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Запуск от пользователя qtiva
+USER qtiva
+WORKDIR /work
+
+# Точка входа
+ENTRYPOINT ["/qtiva/runner"]

@@ -25,7 +25,7 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
 fi
 
 echo "Применяем миграции..."
-for f in ./migrations/*.sql; do
+for f in "$PROJECT_ROOT"/migrations/*.sql; do
   echo " - $(basename "$f")"
   docker exec -i "${CONTAINER}" psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -v ON_ERROR_STOP=1 < "$f"
 done
