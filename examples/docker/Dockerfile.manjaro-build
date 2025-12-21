@@ -1,0 +1,15 @@
+
+FROM manjarolinux/base:latest AS builder
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+    base-devel \
+    cmake \
+    qt5-base \
+    qt5-declarative \
+    qt5-quickcontrols \
+    qt5-quickcontrols2 \
+    && \
+    pacman -Scc --noconfirm && \
+    rm -rf /var/cache/pacman/pkg/*
+WORKDIR /build
+ENTRYPOINT ["/bin/bash", "-c"]
