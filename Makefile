@@ -9,7 +9,8 @@ MANAGER_BIN 	:= $(BIN_DIR)/qtiva-manager
 AGENT_BIN   	:= $(BIN_DIR)/qtiva-agent
 
 .PHONY: help create-env up down restart ps logs psql migrate tidy build clean \
-        run-manager run-agent update-admin health-manager health-agent build-runners
+        run-manager run-agent update-admin health-manager health-agent \
+		build-runners build-examples
 
 help: ## Показать список команд
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -57,6 +58,10 @@ build: ## Собрать бинарники
 build-runners: ## Собрать Docker образы runner'ов
 	@chmod +x ./scripts/build-runners.sh
 	./scripts/build-runners.sh
+
+build-examples: ## Собрать тестовые архивы
+	@chmod +x ./scripts/build-examples.sh
+	./scripts/build-examples.sh
 
 clean: ## Удалить ./bin
 	rm -rf $(BIN_DIR)
