@@ -113,7 +113,7 @@ func LoadConfigFromEnv() (Config, error) {
 	}, nil
 }
 
-// GetImageName возвращает имя образа для заданных параметров
+// Возвращает имя образа для заданных параметров
 func (c Config) GetImageName(os, qtVersion, display string) (string, error) {
 	osImages, ok := c.Images[os]
 	if !ok {

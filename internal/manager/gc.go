@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -98,11 +99,11 @@ func (gc *GarbageCollector) cleanupExpiredRuns(ctx context.Context) {
 		if logPath.Valid && logPath.String != "" {
 			if err := os.Remove(logPath.String); err != nil && !os.IsNotExist(err) {
 				log.Printf("GC: не удалось удалить лог %s: %v", logPath.String, err)
+			} else {
+				// Пытаемся удалить родительскую директорию, если она пуста
+				gc.removeEmptyParentDirs(filepath.Dir(logPath.String))
 			}
 		}
-
-		// Удаляем директорию прогона (если есть)
-		// TODO: удалять /data/runs/<run_id>/
 
 		// Помечаем прогон как удалённый
 		_, err := gc.db.ExecContext(ctx, `
@@ -153,6 +154,9 @@ func (gc *GarbageCollector) cleanupConsumedArtifacts(ctx context.Context) {
 		// Удаляем файл артефакта
 		if err := os.Remove(storedPath); err != nil && !os.IsNotExist(err) {
 			log.Printf("GC: не удалось удалить артефакт %s: %v", storedPath, err)
+		} else {
+			// Пытаемся удалить родительскую директорию, если она пуста
+			gc.removeEmptyParentDirs(filepath.Dir(storedPath))
 		}
 
 		// Помечаем артефакт как удалённый
@@ -171,6 +175,26 @@ func (gc *GarbageCollector) cleanupConsumedArtifacts(ctx context.Context) {
 
 	if deletedCount > 0 {
 		log.Printf("GC: удалено %d временных артефактов", deletedCount)
+	}
+}
+
+// Рекурсивно удаляет пустые родительские директории
+// Останавливается на базовых директориях (/data/runs, /data/artifacts) или при ошибке
+func (gc *GarbageCollector) removeEmptyParentDirs(dir string) {
+	// Защита от удаления системных директорий
+	baseRuns := "/data/runs"
+	baseArtifacts := "/data/artifacts"
+
+	for dir != "" && dir != "/" && dir != baseRuns && dir != baseArtifacts {
+		// Пытаемся удалить директорию (удалится только если пустая)
+		err := os.Remove(dir)
+		if err != nil {
+			// Директория не пуста или другая ошибка — прекращаем
+			break
+		}
+		log.Printf("GC: удалена пустая директория %s", dir)
+		// Поднимаемся на уровень выше
+		dir = filepath.Dir(dir)
 	}
 }
 

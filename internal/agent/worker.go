@@ -14,7 +14,7 @@ import (
 	"github.com/lildannita/qtiva-cloud/internal/artifactsx"
 )
 
-// Worker обрабатывает задания из очереди
+// Обрабатывает задания из очереди
 type Worker struct {
 	id     int
 	db     *sql.DB
@@ -24,7 +24,7 @@ type Worker struct {
 	wg     *sync.WaitGroup
 }
 
-// NewWorker создаёт нового воркера
+// Создаёт нового воркера
 func NewWorker(id int, db *sql.DB, docker *DockerClient, config Config, stopCh chan struct{}, wg *sync.WaitGroup) *Worker {
 	return &Worker{
 		id:     id,
@@ -36,7 +36,7 @@ func NewWorker(id int, db *sql.DB, docker *DockerClient, config Config, stopCh c
 	}
 }
 
-// Start запускает воркера
+// Запускает воркера
 func (w *Worker) Start() {
 	w.wg.Add(1)
 	go w.run()
@@ -63,7 +63,7 @@ func (w *Worker) run() {
 	}
 }
 
-// Job представляет задание из очереди
+// Представляет задание из очереди
 type Job struct {
 	ID          string
 	RunID       string
@@ -72,7 +72,7 @@ type Job struct {
 	MaxAttempts int
 }
 
-// Run представляет прогон
+// Представляет прогон
 type Run struct {
 	ID         string
 	ClientID   string
@@ -84,7 +84,7 @@ type Run struct {
 	QtVersion  string
 }
 
-// processNextJob забирает и обрабатывает следующее задание
+// Забирает и обрабатывает следующее задание
 func (w *Worker) processNextJob() error {
 	ctx := context.Background()
 
@@ -173,7 +173,7 @@ func (w *Worker) processNextJob() error {
 	return nil
 }
 
-// executeJob выполняет задание
+// Выполняет задание
 func (w *Worker) executeJob(ctx context.Context, job Job, run Run, artifactPath string, manifestJSON []byte, networkAllowed bool) {
 	// Парсим манифест
 	var manifest artifactsx.Manifest
@@ -236,7 +236,7 @@ func (w *Worker) executeJob(ctx context.Context, job Job, run Run, artifactPath 
 	w.finishRun(ctx, job, run, status, int(result.ExitCode), logPath)
 }
 
-// failJob помечает задание как проваленное
+// Помечает задание как проваленное
 func (w *Worker) failJob(ctx context.Context, job Job, run Run, errorCode, errorMsg string) {
 	log.Printf("[Worker %d] Задание %s провалено: %s - %s", w.id, job.ID, errorCode, errorMsg)
 
@@ -279,7 +279,7 @@ func (w *Worker) failJob(ctx context.Context, job Job, run Run, errorCode, error
 	}
 }
 
-// finishRun завершает прогон успешно или с провалом
+// Завершает прогон успешно или с провалом
 func (w *Worker) finishRun(ctx context.Context, job Job, run Run, status string, exitCode int, logPath string) {
 	log.Printf("[Worker %d] Прогон %s завершён: status=%s, exit_code=%d", w.id, run.ID, status, exitCode)
 

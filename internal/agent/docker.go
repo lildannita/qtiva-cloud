@@ -3,8 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"io"
-	"path/filepath"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
@@ -14,7 +12,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// DockerClient обёртка над Docker SDK
+// Обёртка над Docker SDK
 type DockerClient struct {
 	cli    *client.Client
 	config Config
@@ -35,18 +33,18 @@ func NewDockerClient(cfg Config) (*DockerClient, error) {
 	}, nil
 }
 
-// Close закрывает клиент
+// Закрывает клиент
 func (d *DockerClient) Close() error {
 	return d.cli.Close()
 }
 
-// Ping проверяет доступность Docker daemon
+// Проверяет доступность Docker daemon
 func (d *DockerClient) Ping(ctx context.Context) error {
 	_, err := d.cli.Ping(ctx, client.PingOptions{})
 	return err
 }
 
-// RunParams параметры для запуска контейнера
+// Параметры для запуска контейнера
 type RunParams struct {
 	RunID          string
 	ArtifactPath   string
@@ -58,14 +56,14 @@ type RunParams struct {
 	Env            map[string]string // Дополнительные переменные окружения из manifest
 }
 
-// RunResult результат выполнения контейнера
+// Результат выполнения контейнера
 type RunResult struct {
 	ExitCode int64
 	Error    error
 	Timeout  bool
 }
 
-// RunContainer запускает runner контейнер и ждёт завершения
+// Запускает runner контейнер и ждёт завершения
 func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunResult {
 	containerName := fmt.Sprintf("qtiva-run-%s", params.RunID)
 
@@ -104,6 +102,7 @@ func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunRe
 		CapDrop:        []string{"ALL"},
 		SecurityOpt:    []string{"no-new-privileges"},
 		NetworkMode:    networkMode,
+		// Прописываем work отдельно, чтобы оставить exec право
 		Tmpfs: map[string]string{
 			"/work": "rw,exec,nosuid,nodev,mode=1777,size=1024m",
 		},
@@ -120,7 +119,7 @@ func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunRe
 				Target:   "/artifacts",
 				ReadOnly: false,
 			},
-			// Tmpfs для /tmp и /work (writable директории)
+			// "Чистый" Tmpfs
 			{
 				Type:   mount.TypeTmpfs,
 				Target: "/tmp",
@@ -212,26 +211,4 @@ func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunRe
 		}
 		return RunResult{ExitCode: -1, Error: ctx.Err()}
 	}
-}
-
-// GetContainerLogs получает логи контейнера
-func (d *DockerClient) GetContainerLogs(ctx context.Context, containerID string) (io.ReadCloser, error) {
-	return d.cli.ContainerLogs(ctx, containerID, client.ContainerLogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-		Follow:     false,
-	})
-}
-
-// EnsureArtifactsDir создаёт директорию для артефактов прогона
-func EnsureArtifactsDir(dataDir, runID string) (string, error) {
-	dir := filepath.Join(dataDir, "runs", runID, "artifacts")
-	if err := ensureDir(dir); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
-func ensureDir(path string) error {
-	return nil // TODO: os.MkdirAll
 }

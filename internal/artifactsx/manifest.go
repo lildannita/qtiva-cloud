@@ -6,24 +6,13 @@ import (
 	"strings"
 )
 
-// Manifest описывает содержимое manifest.json в артефакте
-// Обновлённая структура для работы с QtAda
+// Описывает содержимое manifest.json в артефакте
 type Manifest struct {
-	// ConfigPath — путь к JSON-файлу конфигурации QtAda (обязательно)
-	ConfigPath string `json:"config_path"`
-
-	// Scripts — массив путей к тестовым сценариям QtAda (обязательно, минимум 1)
-	Scripts []string `json:"scripts"`
-
-	// Application — команда запуска тестируемого приложения с аргументами (обязательно)
-	// Пример: "./myapp --some-arg"
-	Application string `json:"application"`
-
-	// TimeoutSec — таймаут для каждого теста в секундах (опционально, по умолчанию 60)
-	TimeoutSec int `json:"timeout_sec"`
-
-	// Env — дополнительные переменные окружения (опционально)
-	Env map[string]string `json:"env"`
+	ConfigPath  string            `json:"config_path"`
+	Scripts     []string          `json:"scripts"`
+	Application string            `json:"application"`
+	TimeoutSec  int               `json:"timeout_sec"`
+	Env         map[string]string `json:"env"`
 }
 
 type ValidateConfig struct {
