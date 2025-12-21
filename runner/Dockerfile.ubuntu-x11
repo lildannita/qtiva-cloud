@@ -17,8 +17,9 @@ RUN apt-get update && apt-get install -y \
     git \
     # Qt 5.15 development
     qtbase5-dev \
+    qtbase5-private-dev \
+    qt5-qmltooling-plugins \
     qtdeclarative5-dev \
-    qtquickcontrols2-5-dev \
     libqt5remoteobjects5-dev \
     && \
     apt-get clean && \
@@ -29,7 +30,7 @@ WORKDIR /build
 RUN git clone --branch dev_qtada_using --depth 1 https://github.com/lildannita/QtAda.git
 
 WORKDIR /build/QtAda
-RUN install.sh --only-cli --skip-symlink --skip-package-install
+RUN bash install.sh --only-cli --skip-symlink --skip-package-install
 
 # ============================================================
 # Stage 2: Финальный образ
