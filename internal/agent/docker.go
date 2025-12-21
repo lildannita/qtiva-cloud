@@ -104,6 +104,9 @@ func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunRe
 		CapDrop:        []string{"ALL"},
 		SecurityOpt:    []string{"no-new-privileges"},
 		NetworkMode:    networkMode,
+		Tmpfs: map[string]string{
+			"/work": "rw,exec,nosuid,nodev,mode=1777,size=1024m",
+		},
 		Mounts: []mount.Mount{
 			{
 				Type:     mount.TypeBind,
@@ -126,14 +129,14 @@ func (d *DockerClient) RunContainer(ctx context.Context, params RunParams) RunRe
 					Mode:      0o1777,
 				},
 			},
-			{
-				Type:   mount.TypeTmpfs,
-				Target: "/work",
-				TmpfsOptions: &mount.TmpfsOptions{
-					SizeBytes: 1024 * 1024 * 1024, // 1GB
-					Mode:      0o1777,
-				},
-			},
+			// {
+			// 	Type:   mount.TypeTmpfs,
+			// 	Target: "/work",
+			// 	TmpfsOptions: &mount.TmpfsOptions{
+			// 		SizeBytes: 1024 * 1024 * 1024, // 1GB
+			// 		Mode:      0o1777,
+			// 	},
+			// },
 		},
 	}
 

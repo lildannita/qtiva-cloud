@@ -32,10 +32,12 @@ log "Extracting artifact..."
 tar -xzf "$INPUT_ARTIFACT" \
   --no-same-owner --no-same-permissions \
   --exclude='._*' \
-  --warning=no-unknown-keyword 2>&1 || {
-    log "ERROR: Failed to extract artifact"
-    exit 1
-}
+  --warning=no-unknown-keyword 2>&1 || true
+  
+#   {
+#     log "ERROR: Failed to extract artifact"
+#     exit 1
+# }
 
 # Проверяем наличие manifest.json
 if [[ ! -f manifest.json ]]; then
@@ -82,6 +84,9 @@ log "Timeout per test: ${TIMEOUT_SEC}s"
 export XDG_RUNTIME_DIR="/tmp/runtime"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
+
+# TODO: помещать библиотеки по стандартному пути
+export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
 
 # Определяем тип display из переменных окружения контейнера
 # (устанавливаются агентом на основе данных из runs)
@@ -145,14 +150,14 @@ while IFS='=' read -r key value; do
 done < <(jq -r '.env // {} | to_entries[] | "\(.key)=\(.value)"' manifest.json 2>/dev/null || true)
 
 # Делаем исполняемые файлы исполняемыми
-find . -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
+# find . -name "*.sh" -type f -exec chmod +x {} \; 2>/dev/null || true
 
 # Извлекаем путь к исполняемому файлу и делаем его исполняемым
-APP_BINARY=$(echo "$APPLICATION" | awk '{print $1}')
-if [[ -f "$APP_BINARY" ]]; then
-    chmod +x "$APP_BINARY"
-    log "Made executable: $APP_BINARY"
-fi
+# APP_BINARY=$(echo "$APPLICATION" | awk '{print $1}')
+# if [[ -f "$APP_BINARY" ]]; then
+#     chmod +x "$APP_BINARY"
+#     log "Made executable: $APP_BINARY"
+# fi
 
 log "=== Starting QtAda Test Execution ==="
 log "Working directory: $(pwd)"
@@ -170,13 +175,13 @@ for SCRIPT in "${SCRIPTS[@]}"; do
         log "ERROR: Test script not found: $SCRIPT"
         exit 1
     fi
-    SCRIPTS_LIST="$SCRIPTS_LIST \"$SCRIPT\""
+    SCRIPTS_LIST="$SCRIPTS_LIST $SCRIPT"
     log "  - $SCRIPT"
 done
 
 # Формируем команду QtAda
 # qtada [options] <configuration> --run <script path> [<script path> ...] <application> [args]
-QTADA_CMD="qtada --timeout $TIMEOUT_SEC --show-log --no-highlight \"$CONFIG_PATH\" --run $SCRIPTS_LIST $APPLICATION"
+QTADA_CMD="qtada --timeout $TIMEOUT_SEC --show-log --no-highlight --config-path $CONFIG_PATH --run $SCRIPTS_LIST $APPLICATION"
 
 log ""
 log "========================================"
