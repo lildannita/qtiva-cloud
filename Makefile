@@ -10,7 +10,7 @@ AGENT_BIN   	:= $(BIN_DIR)/qtiva-agent
 
 .PHONY: help create-env up down restart ps logs psql migrate tidy build clean \
         run-manager run-agent update-admin health-manager health-agent \
-		build-runners build-examples
+		build-runners build-examples-docker
 
 help: ## Показать список команд
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -59,9 +59,9 @@ build-runners: ## Собрать Docker образы runner'ов
 	@chmod +x ./scripts/build-runners.sh
 	./scripts/build-runners.sh
 
-build-examples: ## Собрать тестовые архивы
-	@chmod +x ./scripts/build-examples.sh
-	./scripts/build-examples.sh
+build-examples-docker: ## Собрать тестовые архивы через Docker
+	@chmod +x ./scripts/build-examples-docker.sh
+	./scripts/build-examples-docker.sh
 
 clean: ## Удалить ./bin
 	rm -rf $(BIN_DIR)
@@ -92,7 +92,3 @@ update-admin: ## Создать или обновить администрато
 		seed-admin --replace \
 		--email "$$QTIVA_ADMIN_EMAIL" \
 		--password "$$QTIVA_ADMIN_PASSWORD"
-
-demo-artifact: ## Создать демо-артефакт
-	@chmod +x ./scripts/create-demo-artifact.sh
-	./scripts/create-demo-artifact.sh

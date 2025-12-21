@@ -26,8 +26,8 @@ type Config struct {
 	DefaultCPU      float64
 	DefaultMemoryMB int64
 	DefaultPids     int64
-	DefaultTimeout  time.Duration
-	MaxTimeout      time.Duration
+	// DefaultTimeout  time.Duration
+	MaxTimeout time.Duration
 
 	// Сеть
 	DefaultNetworkMode string
@@ -69,10 +69,10 @@ func LoadConfigFromEnv() (Config, error) {
 	defaultMemoryMB := int64(2048)
 	defaultPids := int64(256)
 
-	defaultTimeout, err := commonx.RequireDuration("QTIVA_DEFAULT_TIMEOUT")
-	if err != nil {
-		defaultTimeout = 90 * time.Second
-	}
+	// defaultTimeout, err := commonx.RequireDuration("QTIVA_DEFAULT_TIMEOUT")
+	// if err != nil {
+	// 	defaultTimeout = 90 * time.Second
+	// }
 
 	maxTimeout, err := commonx.RequireDuration("QTIVA_MAX_TIMEOUT")
 	if err != nil {
@@ -96,15 +96,15 @@ func LoadConfigFromEnv() (Config, error) {
 	}
 
 	return Config{
-		Concurrency:        concurrency,
-		PollInterval:       pollInterval,
-		DataDir:            dataDir,
-		DockerHost:         dockerHost,
-		DockerRuntime:      dockerRuntime,
-		DefaultCPU:         defaultCPU,
-		DefaultMemoryMB:    defaultMemoryMB,
-		DefaultPids:        defaultPids,
-		DefaultTimeout:     defaultTimeout,
+		Concurrency:     concurrency,
+		PollInterval:    pollInterval,
+		DataDir:         dataDir,
+		DockerHost:      dockerHost,
+		DockerRuntime:   dockerRuntime,
+		DefaultCPU:      defaultCPU,
+		DefaultMemoryMB: defaultMemoryMB,
+		DefaultPids:     defaultPids,
+		// DefaultTimeout:     defaultTimeout,
 		MaxTimeout:         maxTimeout,
 		DefaultNetworkMode: "none",
 		AllowedNetworkMode: "bridge",

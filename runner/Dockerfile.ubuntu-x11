@@ -1,6 +1,4 @@
 # qtiva-runner:ubuntu-qt5.15-x11
-# Runner контейнер для запуска Qt GUI тестов в Ubuntu с X11 (Xvfb)
-# Multi-stage build: сборка QtAda + финальный образ
 
 # ============================================================
 # Stage 1: Сборка QtAda
@@ -15,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
+    patchelf \
     # Qt 5.15 development
     qtbase5-dev \
     qtbase5-private-dev \
@@ -28,9 +27,16 @@ RUN apt-get update && apt-get install -y \
 # Клонируем и собираем QtAda
 WORKDIR /build
 RUN git clone --branch dev_qtada_using --depth 1 https://github.com/lildannita/QtAda.git
-
 WORKDIR /build/QtAda
 RUN bash install.sh --only-cli --skip-symlink --skip-package-install
+
+# Правим пути к библиотекам с помощью patchelf,
+# чтобы qtada и библиотеки искали зависимости рядом с собой
+RUN patchelf --force-rpath --set-rpath '$ORIGIN/../lib' /build/QtAda/build/bin/qtada
+# Для самих библиотек: чтобы их транзитивные зависимости тоже искались рядом
+RUN for f in /build/QtAda/build/libs/libQtAda_*.so*; do \
+      patchelf --force-rpath --set-rpath '$ORIGIN' "$f" || true; \
+    done
 
 # ============================================================
 # Stage 2: Финальный образ
@@ -63,6 +69,7 @@ RUN apt-get update && apt-get install -y \
     qml-module-qtquick2 \
     qml-module-qtquick-controls2 \
     qml-module-qtquick-window2 \
+    qml-module-qtquick-layouts \
     qml-module-qtgraphicaleffects \
     # X11
     xvfb \
@@ -92,9 +99,10 @@ RUN apt-get update && apt-get install -y \
     rm -rf /var/lib/apt/lists/*
 
 # Копируем собранный QtAda из builder stage
-COPY --from=builder /build/QtAda/build/bin/qtada /usr/local/bin/qtada
-COPY --from=builder /build/QtAda/build/libs/libQtAda_*.so /usr/local/lib/
-RUN chmod +x /usr/local/bin/qtada && ldconfig
+RUN mkdir -p /opt/qtada/bin /opt/qtada/lib
+COPY --from=builder /build/QtAda/build/bin/qtada /opt/qtada/bin/qtada
+COPY --from=builder /build/QtAda/build/libs/libQtAda_*.so* /opt/qtada/lib/
+RUN ln -s /opt/qtada/bin/qtada /usr/local/bin/qtada
 
 # Создаём пользователя для запуска тестов
 RUN useradd -m -s /bin/bash qtiva && \

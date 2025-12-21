@@ -2,3 +2,5 @@
 .env
 bin/
 ToR-extended.md
+.DS_Store
+.vscode

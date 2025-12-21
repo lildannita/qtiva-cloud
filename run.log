@@ -1,0 +1,43 @@
+[2025-12-21T06:01:42+00:00] === qtiva Runner Start ===
+[2025-12-21T06:01:42+00:00] Run ID: run_01KCZQZNYWZTDGBC8N3D3GNM6Y
+-rw-r----- 1 qtiva qtiva 7224 Dec 21 06:01 /input/app.tar.gz
+[2025-12-21T06:01:42+00:00] Extracting artifact...
+[2025-12-21T06:01:42+00:00] Config path: tests/config.json
+[2025-12-21T06:01:42+00:00] Application: ./qtquick_example
+[2025-12-21T06:01:42+00:00] Scripts count: 1
+[2025-12-21T06:01:42+00:00] Timeout per test: 60s
+[2025-12-21T06:01:42+00:00] Display type: x11
+[2025-12-21T06:01:42+00:00] Starting display server (x11)...
+[2025-12-21T06:01:43+00:00] Xvfb started successfully
+[2025-12-21T06:01:43+00:00] Setting environment variables...
+[2025-12-21T06:01:43+00:00] === Starting QtAda Test Execution ===
+[2025-12-21T06:01:43+00:00] Working directory: /work/data
+[2025-12-21T06:01:43+00:00] Total scripts: 1
+[2025-12-21T06:01:43+00:00] ========================================
+[2025-12-21T06:01:43+00:00] === Running QtAda ===
+[2025-12-21T06:01:43+00:00] ========================================
+[2025-12-21T06:01:43+00:00] Command: qtada --timeout 60 --show-elapsed --show-log --no-highlight --config-path tests/config.json --run tests/ok_test.js ./qtquick_example
+[2025-12-21T06:01:43+00:00] --- Test output start ---
+[ RUN      ] tests/ok_test.js
+QT QUICK EXAMPLE APP STARTED
+Failed to create /home/qtiva/.cache for shader cache (Read-only file system)---disabling.
+'textItem' was retrieved in 0 ms and became visible in 0 ms
+'textItem' verified in 0 ms
+'button' was retrieved in 0 ms and became visible in 0 ms
+'textItem' was retrieved in 0 ms and became visible in 0 ms
+'textItem' verified in 0 ms
+QT QUICK EXAMPLE APP FINISHED
+[       OK ] tests/ok_test.js
+[==========]
+[  PASSED  ] 1 tests
+[2025-12-21T06:01:43+00:00] --- Test output end ---
+[2025-12-21T06:01:43+00:00] RESULT: PASSED
+[2025-12-21T06:01:43+00:00] 
+[2025-12-21T06:01:43+00:00] Stopping display server...
+[2025-12-21T06:01:43+00:00] 
+[2025-12-21T06:01:43+00:00] ========================================
+[2025-12-21T06:01:43+00:00] === Test Execution Summary ===
+[2025-12-21T06:01:43+00:00] ========================================
+[2025-12-21T06:01:43+00:00] Total scripts: 1
+[2025-12-21T06:01:43+00:00] === OVERALL: PASSED ===
+[2025-12-21T06:01:43+00:00] === Qtiva Runner End ===

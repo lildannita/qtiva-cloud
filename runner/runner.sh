@@ -3,7 +3,8 @@ set -euo pipefail
 
 INPUT_ARTIFACT="/input/app.tar.gz"
 LOG_FILE="/artifacts/run.log"
-WORK_DIR="/work"
+# Не работаем чисто в /work, т.к. там могут быть проблемы с правами
+WORK_DIR="/work/data"
 
 # Функция логирования
 log() {
@@ -25,6 +26,7 @@ fi
 ls -l "$INPUT_ARTIFACT"
 
 # Переходим в рабочую директорию
+mkdir -p "$WORK_DIR"
 cd "$WORK_DIR"
 
 # Распаковываем артефакт
@@ -33,11 +35,6 @@ tar -xzf "$INPUT_ARTIFACT" \
   --no-same-owner --no-same-permissions \
   --exclude='._*' \
   --warning=no-unknown-keyword 2>&1 || true
-  
-#   {
-#     log "ERROR: Failed to extract artifact"
-#     exit 1
-# }
 
 # Проверяем наличие manifest.json
 if [[ ! -f manifest.json ]]; then
@@ -85,9 +82,6 @@ export XDG_RUNTIME_DIR="/tmp/runtime"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-# TODO: помещать библиотеки по стандартному пути
-export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
-
 # Определяем тип display из переменных окружения контейнера
 # (устанавливаются агентом на основе данных из runs)
 DISPLAY_TYPE="${QTIVA_DISPLAY_TYPE:-wayland}"
@@ -95,15 +89,20 @@ log "Display type: $DISPLAY_TYPE"
 
 # Запуск display server
 log "Starting display server ($DISPLAY_TYPE)..."
+export LIBGL_ALWAYS_SOFTWARE=1          # Всегда использовать software OpenGL (без GPU/DRI)
+export GALLIUM_DRIVER=llvmpipe          # Выбрать софтварный драйвер Mesa (llvmpipe)
+export MESA_LOADER_DRIVER_OVERRIDE=llvmpipe  # Жёстко заставить Mesa грузить llvmpipe
+export MESA_NO_ZINK=1                   # Отключить Zink (OpenGL поверх Vulkan), чтобы не требовался Vulkan
+export QT_OPENGL=software               # Заставить Qt использовать software OpenGL backend
 
 if [[ "$DISPLAY_TYPE" == "wayland" ]]; then
     # Запускаем Weston в headless режиме
     export WAYLAND_DISPLAY="wayland-0"
     export QT_QPA_PLATFORM="wayland"
-    
     weston --backend=headless-backend.so \
            --socket="$WAYLAND_DISPLAY" \
            --width=1920 --height=1080 \
+           --use-pixman \
            &>/tmp/weston.log &
     DISPLAY_PID=$!
     
@@ -168,31 +167,31 @@ FINAL_EXIT_CODE=0
 
 log "Total scripts: $TOTAL_TESTS"
 
-# Формируем список скриптов для QtAda
-SCRIPTS_LIST=""
-for SCRIPT in "${SCRIPTS[@]}"; do
-    if [[ ! -f "$SCRIPT" ]]; then
-        log "ERROR: Test script not found: $SCRIPT"
-        exit 1
-    fi
-    SCRIPTS_LIST="$SCRIPTS_LIST $SCRIPT"
-    log "  - $SCRIPT"
-done
+# # Формируем список скриптов для QtAda
+# SCRIPTS_LIST=""
+# for SCRIPT in "${SCRIPTS[@]}"; do
+#     if [[ ! -f "$SCRIPT" ]]; then
+#         log "ERROR: Test script not found: $SCRIPT"
+#         exit 1
+#     fi
+#     SCRIPTS_LIST="$SCRIPTS_LIST $SCRIPT"
+#     log "  - $SCRIPT"
+# done
 
 # Формируем команду QtAda
 # qtada [options] <configuration> --run <script path> [<script path> ...] <application> [args]
-QTADA_CMD="qtada --timeout $TIMEOUT_SEC --show-log --no-highlight --config-path $CONFIG_PATH --run $SCRIPTS_LIST $APPLICATION"
+# QTADA_CMD="qtada --timeout $TIMEOUT_SEC --show-log --no-highlight --config-path $CONFIG_PATH --run $SCRIPTS_LIST $APPLICATION"
+QTADA_ARGS=(qtada --timeout "$TIMEOUT_SEC" --show-elapsed --show-log --no-highlight --config-path "$CONFIG_PATH" --run)
+QTADA_ARGS+=("${SCRIPTS[@]}")
+QTADA_ARGS+=("$APPLICATION")
 
-log ""
 log "========================================"
 log "=== Running QtAda ==="
 log "========================================"
-log "Command: `$QTADA_CMD`"
+log "Command: ${QTADA_ARGS[*]}"
+
 log "--- Test output start ---"
-
-# Запускаем QtAda
-eval "$QTADA_CMD" || FINAL_EXIT_CODE=$?
-
+"${QTADA_ARGS[@]}" || FINAL_EXIT_CODE=$?
 log "--- Test output end ---"
 
 # Анализируем результат

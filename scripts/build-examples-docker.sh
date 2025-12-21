@@ -1,26 +1,4 @@
 #!/usr/bin/env bash
-# =============================================================================
-# Сборка тестовых Qt-проектов внутри Docker-контейнеров.
-# Создаёт архивы для каждой комбинации проект+платформа:
-#   - qtwidgets_example-manjaro.tar.gz
-#   - qtwidgets_example-ubuntu.tar.gz  
-#   - qtquick_example-manjaro.tar.gz
-#   - qtquick_example-ubuntu.tar.gz
-#
-# Архивы содержат:
-#   - Скомпилированный бинарник
-#   - manifest.json
-#   - tests/ (config.json + *.js скрипты)
-#
-# Использование:
-#   ./scripts/build-examples-docker.sh [--clean] [--project NAME] [--platform NAME]
-#
-# Опции:
-#   --clean         Пересобрать Docker образы
-#   --project NAME  Собрать только указанный проект (qtwidgets_example или qtquick_example)
-#   --platform NAME Собрать только для указанной платформы (manjaro или ubuntu)
-# =============================================================================
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,44 +19,9 @@ log_warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*"; }
 log_step()  { echo -e "${BLUE}[STEP]${NC} $*"; }
 
-# Параметры по умолчанию
-CLEAN_BUILD=false
-FILTER_PROJECT=""
-FILTER_PLATFORM=""
-
-# Парсинг аргументов
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --clean)
-            CLEAN_BUILD=true
-            shift
-            ;;
-        --project)
-            FILTER_PROJECT="$2"
-            shift 2
-            ;;
-        --platform)
-            FILTER_PLATFORM="$2"
-            shift 2
-            ;;
-        *)
-            log_error "Неизвестный аргумент: $1"
-            exit 1
-            ;;
-    esac
-done
-
 # Списки проектов и платформ
 PROJECTS=("qtwidgets_example" "qtquick_example")
 PLATFORMS=("manjaro" "ubuntu")
-
-# Применяем фильтры
-if [[ -n "$FILTER_PROJECT" ]]; then
-    PROJECTS=("$FILTER_PROJECT")
-fi
-if [[ -n "$FILTER_PLATFORM" ]]; then
-    PLATFORMS=("$FILTER_PLATFORM")
-fi
 
 # Проверяем наличие Docker
 if ! command -v docker &> /dev/null; then
@@ -99,7 +42,7 @@ build_docker_image() {
     local dockerfile="$DOCKER_DIR/Dockerfile.build-$platform"
     
     # Проверяем существует ли образ
-    if [[ "$CLEAN_BUILD" == "false" ]] && docker image inspect "$image_name" &> /dev/null; then
+    if docker image inspect "$image_name" &> /dev/null; then
         log_info "Docker образ $image_name уже существует (используйте --clean для пересборки)"
         return 0
     fi
@@ -194,12 +137,22 @@ echo "Build completed successfully"
     cp "$executable" "$archive_temp/"
     chmod +x "$archive_temp/$project_name"
     
-    # Копируем тестовые данные
+    # === Архив 1: Полный (все тесты) ===
+    log_info "Создание полного архива (все тесты)..."
+    
+    local archive_temp
+    archive_temp=$(mktemp -d)
+    
+    # Копируем исполняемый файл
+    cp "$executable" "$archive_temp/"
+    chmod +x "$archive_temp/$project_name"
+    
+    # Копируем все тестовые данные
     mkdir -p "$archive_temp/tests"
     cp "$tests_dir/config.json" "$archive_temp/tests/"
     cp "$tests_dir"/*.js "$archive_temp/tests/"
     
-    # Формируем список тестовых скриптов для manifest.json
+    # Формируем список всех тестовых скриптов
     local scripts_json="["
     local first=true
     for js_file in "$tests_dir"/*.js; do
@@ -225,21 +178,55 @@ echo "Build completed successfully"
 }
 EOF
     
-    log_info "Сгенерирован manifest.json:"
+    log_info "manifest.json (полный):"
+    cat "$archive_temp/manifest.json"
+    
+    # Создаём полный архив
+    tar -czf "$archive_path" -C "$archive_temp" .
+    log_info "Архив создан: $archive_path"
+    
+    rm -rf "$archive_temp"
+    
+    # === Архив 2: Только ok_test.js ===
+    local archive_ok_name="${project_name}-${platform}-ok.tar.gz"
+    local archive_ok_path="$ARCHIVES_DIR/$archive_ok_name"
+    
+    log_info "Создание архива только с ok_test.js..."
+    
+    archive_temp=$(mktemp -d)
+    
+    # Копируем исполняемый файл
+    cp "$executable" "$archive_temp/"
+    chmod +x "$archive_temp/$project_name"
+    
+    # Копируем только ok_test.js
+    mkdir -p "$archive_temp/tests"
+    cp "$tests_dir/config.json" "$archive_temp/tests/"
+    cp "$tests_dir/ok_test.js" "$archive_temp/tests/"
+    
+    # Создаём manifest.json только с ok_test.js
+    cat > "$archive_temp/manifest.json" << EOF
+{
+  "config_path": "tests/config.json",
+  "scripts": ["tests/ok_test.js"],
+  "application": "./$project_name",
+  "timeout_sec": 60,
+  "env": {}
+}
+EOF
+    
+    log_info "manifest.json (только ok):"
     cat "$archive_temp/manifest.json"
     
     # Создаём архив
-    tar -czf "$archive_path" -C "$archive_temp" .
-    
-    log_info "Архив создан: $archive_path"
-    log_info "Содержимое архива:"
-    tar -tzf "$archive_path"
+    tar -czf "$archive_ok_path" -C "$archive_temp" .
+    log_info "Архив создан: $archive_ok_path"
     
     # Очищаем временные директории
     rm -rf "$temp_output"
     rm -rf "$archive_temp"
     
-    log_info "Готово: $archive_name"
+    log_info "Готово: $archive_name, $archive_ok_name"
     echo ""
 }
 
