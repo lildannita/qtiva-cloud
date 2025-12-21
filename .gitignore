@@ -4,3 +4,4 @@ bin/
 ToR-extended.md
 .DS_Store
 .vscode
+*.log
