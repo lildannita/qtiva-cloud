@@ -1,240 +1,245 @@
 # qtiva-cloud
 
-Система удалённого GUI-тестирования Qt-приложений.
+Облачная платформа для удалённого автоматического тестирования графических пользовательских интерфейсов Qt-приложений.
+
+## Описание
+
+qtiva-cloud — это SaaS-платформа, предоставляющая изолированные тестовые окружения для запуска GUI-тестов Qt-приложений с различными конфигурациями операционных систем и дисплейных подсистем. Система интегрируется с фреймворком [qtiva (QtAda)](https://github.com/lildannita/qtada) для выполнения автоматических тестов над готовыми бинарными файлами.
+
+## Возможности
+
+- **Микросервисная архитектура**: Manager (управление), Agent (исполнение), Runner containers (изолированные окружения)
+- **Мультитенантность**: изоляция данных и ресурсов различных клиентов
+- **Множественные конфигурации**:
+    - ОС: Ubuntu 22.04, Manjaro
+    - Дисплейные системы: X11 (Xvfb), Wayland (Weston headless)
+    - Qt версия: 5.15
+- **Безопасность**: JWT-аутентификация, RBAC, изоляция через Docker (+ gVisor, если доступен)
+- **Контейнеризация**: каждый тест выполняется в одноразовом изолированном контейнере
+- **Автоматическая очистка**: TTL-based Garbage Collector для артефактов и результатов
+
+## Быстрый старт
+
+### 1. Клонирование репозитория
+
+```bash
+git clone https://github.com/yourusername/qtiva-cloud.git
+cd qtiva-cloud
+```
+
+### 2. Настройка конфигурации
+
+Создайте файл `.env` на основе примера:
+
+```bash
+cp .env.example .env
+```
+
+### 3. Сборка компонентов
+
+```bash
+# Сборка Manager и Agent
+make build
+
+# Сборка runner images для всех конфигураций
+make build-runners
+```
+
+### 4. Запуск системы
+
+```bash
+# Запуск PostgreSQL
+make up
+
+# Применение миграций
+make migrate
+
+# Создание администратора
+make update-admin
+
+# Запуск Manager (в отдельном терминале)
+make run-manager
+
+# Запуск Agent (в отдельном терминале)
+make run-agent
+```
+
+### 5. Проверка работоспособности
+
+```bash
+make health-manager
+make health-agent
+```
+
+## Использование
+
+### Подготовка тестового артефакта
+
+Артефакт представляет собой TAR-архив со следующей структурой:
+
+```
+app.tar.gz
+├── your_app              # Исполняемый файл приложения
+├── manifest.json         # Конфигурация выполнения
+└── tests/
+    ├── config.json       # Конфиг QtAda
+    └── test_script.js    # Тестовые скрипты QtAda
+```
+
+Пример `manifest.json`:
+
+```json
+{
+  "config_path": "tests/config.json",
+  "scripts": ["tests/test_script.js"],
+  "application": "./your_app",
+  "timeout_sec": 60,
+  "env": {}
+}
+```
+
+### Создание тестовых артефактов
+
+Для автоматической подготовки примеров:
+
+```bash
+make build-examples-docker
+```
+
+### Базовый workflow
+
+```bash
+# 1. Аутентификация
+TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"password"}' \
+  | jq -r '.access_token')
+
+# 2. Загрузка артефакта
+ARTIFACT_ID=$(curl -s -X POST http://localhost:8081/artifacts \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@app.tar.gz" \
+  | jq -r '.artifact_id')
+
+# 3. Создание прогона
+RUN_ID=$(curl -s -X POST http://localhost:8080/runs \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{\"artifact_id\":\"$ARTIFACT_ID\",\"os\":\"ubuntu\",\"display\":\"x11\",\"qt_version\":\"5.15\"}" \
+  | jq -r '.run_id')
+
+# 4. Проверка статуса
+curl -s http://localhost:8080/runs/$RUN_ID \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. Получение лога
+curl -s http://localhost:8080/runs/$RUN_ID/log \
+  -H "Authorization: Bearer $TOKEN"
+```
 
 ## Архитектура
 
 ```
-                                      ┌─────────────────┐
-                                      │   PostgreSQL    │
-                                      │ (metadata, jobs)│
-                                      └────────┬────────┘
-                                               │
-┌──────────────┐     HTTPS/JWT     ┌──────────┴──────────┐
-│  User / CI   │ ─────────────────►│   qtiva-manager     │
-└──────────────┘                   │  (HTTP API + GC)    │
-                                   └──────────┬──────────┘
-                                              │
-                                    jobs table│polling
-                                              │
-                                   ┌──────────┴──────────┐
-                                   │    qtiva-agent      │
-                                   │ (worker pool)       │
-                                   └──────────┬──────────┘
-                                              │
-                                    Docker API│
-                                              │
-                                   ┌──────────┴──────────┐
-                                   │   Runner Container  │
-                                   │ (gVisor + Wayland)  │
-                                   └─────────────────────┘
+┌─────────────┐
+│   Client    │ (HTTPS)
+└──────┬──────┘
+       │
+       ├─────────────────┐
+       │                 │
+┌──────▼─────────┐  ┌────▼────────┐
+│  Manager API   │  │  Upload API │
+│   (port 8080)  │  │ (port 8081) │
+└────────┬───────┘  └──────┬──────┘
+         │                 │
+         └────────┬────────┘
+                  │
+         ┌────────▼────────┐
+         │   PostgreSQL    │
+         │  (БД + очередь) │
+         └────────┬────────┘
+                  │ (polling)
+         ┌────────▼────────┐
+         │      Agent      │
+         │  (Worker Pool)  │
+         └────────┬────────┘
+                  │ (Docker API)
+         ┌────────▼─────────┐
+         │ Runner Containers│
+         │     (Docker)     │
+         └──────────────────┘
 ```
 
-## Быстрый старт
+## API документация
 
-### 1. Подготовка окружения
+Полная спецификация API доступна в [ПРИЛОЖЕНИЕ А](https://claude.ai/chat/docs/API.md).
 
-```bash
-# Клонируем репозиторий
-git clone https://github.com/lildannita/qtiva-cloud.git
-cd qtiva-cloud
+Основные endpoints:
 
-# Создаём .env из примера
-cp .env.example .env
-# Редактируем .env при необходимости
-```
-
-### 2. Запуск PostgreSQL
-
-```bash
-# Запуск БД
-docker compose -f docker-compose.dev.yml up -d
-
-# Применение миграций
-./scripts/migrate.sh
-```
-
-### 3. Сборка
-
-```bash
-# Сборка бинарников manager и agent
-make build
-
-# Сборка runner образов (требуется Docker)
-./scripts/build-runners.sh
-```
-
-### 4. Запуск сервисов
-
-```bash
-# Terminal 1: Manager
-./bin/qtiva-manager serve
-
-# Terminal 2: Agent
-./bin/qtiva-agent serve
-```
-
-### 5. Создание администратора
-
-```bash
-./bin/qtiva-manager seed-admin \
-  --email admin@qtiva.local \
-  --password SuperSecurePassword123!
-```
-
-## API Endpoints
-
-### Аутентификация
-
-```bash
-# Логин (получение JWT)
-curl -X POST http://localhost:8080/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email": "admin@qtiva.local", "password": "SuperSecurePassword123!"}'
-
-# Информация о пользователе
-curl http://localhost:8080/me \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Администрирование (только для admin)
-
-```bash
-# Создание клиента
-curl -X POST http://localhost:8080/admin/clients \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "ClientA", "network_allowed": false, "concurrency_limit": 2}'
-
-# Создание invite-кода
-curl -X POST http://localhost:8080/admin/invites \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"client_id": "cl_...", "max_uses": 10}'
-```
-
-### Регистрация пользователя
-
-```bash
-curl -X POST http://localhost:8080/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "SecurePassword123!",
-    "invite_code": "INV-XXXX-YYYY"
-  }'
-```
-
-### Загрузка артефакта
-
-```bash
-# Загрузка на upload-порт (8081)
-curl -X POST http://localhost:8081/artifacts \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@app.tar.gz"
-```
-
-### Прогоны
-
-```bash
-# Создание прогона
-curl -X POST http://localhost:8080/runs \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "artifact_id": "art_...",
-    "os": "manjaro",
-    "display": "wayland",
-    "qt_version": "5.15"
-  }'
-
-# Статус прогона
-curl http://localhost:8080/runs/run_... \
-  -H "Authorization: Bearer $TOKEN"
-
-# Скачивание лога
-curl http://localhost:8080/runs/run_.../log \
-  -H "Authorization: Bearer $TOKEN" \
-  -o run.log
-```
-
-## Формат manifest.json
-
-```json
-{
-  "run_cmd": "./run-tests.sh",
-  "timeout_sec": 60,
-  "needs_display": true,
-  "qt_version": "5.15",
-  "os": "manjaro",
-  "display": "wayland",
-  "env": {
-    "LC_ALL": "C.UTF-8",
-    "QT_QPA_PLATFORM": "wayland"
-  }
-}
-```
-
-### Поля:
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `run_cmd` | string | Команда для запуска (обязательно) |
-| `timeout_sec` | int | Максимальное время выполнения в секундах (обязательно) |
-| `needs_display` | bool | Требуется ли display server |
-| `qt_version` | string | Версия Qt (`5.15`) |
-| `os` | string | Целевая ОС (`manjaro`, `ubuntu`) |
-| `display` | string | Тип дисплея (`wayland`, `x11`) |
-| `env` | object | Дополнительные переменные окружения |
-
-## Статусы прогона
-
-| Статус | Описание |
-|--------|----------|
-| `pending` | Ожидает выполнения |
-| `running` | Выполняется |
-| `passed` | Успешно завершён (exit_code = 0) |
-| `failed` | Завершён с ошибкой (exit_code != 0) |
-| `timeout` | Превышен лимит времени |
-| `error` | Системная ошибка |
-
-## Безопасность
-
-- Контейнеры запускаются через **gVisor** (`runsc`)
-- Сеть отключена по умолчанию (`--network none`)
-- Read-only root filesystem
-- Все capabilities сброшены
-- `no-new-privileges` включен
-- Ресурсы ограничены (CPU, RAM, pids)
-
-## Переменные окружения
-
-См. `.env.example` для полного списка.
-
-### Основные:
-
-| Переменная | Описание |
-|------------|----------|
-| `QTIVA_MANAGER_HTTP_ADDR` | Адрес API сервера |
-| `QTIVA_MANAGER_UPLOAD_HTTP_ADDR` | Адрес upload сервера |
-| `QTIVA_AGENT_HTTP_ADDR` | Адрес agent сервера |
-| `QTIVA_AGENT_CONCURRENCY` | Количество воркеров |
-| `QTIVA_DOCKER_RUNTIME` | Docker runtime (`runsc`) |
-| `POSTGRES_DSN` | Строка подключения к PostgreSQL |
+- `POST /auth/register` — регистрация пользователя
+- `POST /auth/login` — аутентификация
+- `POST /artifacts` — загрузка артефакта (порт 8081)
+- `POST /runs` — создание прогона
+- `GET /runs/{id}` — получение статуса
+- `GET /runs/{id}/log` — скачивание лога
 
 ## Разработка
 
-```bash
-# Запуск тестов
-go test ./...
+### Структура проекта
 
-# Форматирование
-go fmt ./...
-
-# Линтер
-golangci-lint run
 ```
+qtiva-cloud/
+├── cmd/
+│   ├── qtiva-manager/    # Manager API
+│   └── qtiva-agent/      # Agent service
+├── internal/
+│   ├── manager/          # Бизнес-логика Manager
+│   ├── agent/            # Бизнес-логика Agent
+│   └── .../              # Вспомогательный код и утилиты
+├── migrations/           # SQL миграции
+├── examples/             # Примеры тестовых приложений
+├── scripts/              # Вспомогательные скрипты
+└── runner/               # Dockerfile для runner images
+```
+
+### Makefile команды
+
+```bash
+make build                 # Сборка Manager и Agent
+make build-runners         # Сборка runner images
+make build-examples-docker # Сборка примеров
+make up                    # Запуск PostgreSQL
+make migrate               # Применение миграций
+make update-admin          # Создание/обновление админа
+make run-manager           # Запуск Manager
+make run-agent             # Запуск Agent
+make health-manager        # Health check Manager
+make health-agent          # Health check Agent
+```
+
+## Технологический стек
+
+- **Backend**: Go 1.21+
+- **Database**: PostgreSQL 16 (метаданные + очередь задач)
+- **Контейнеризация**: Docker Engine (+ gVisor, runsc)
+- **Аутентификация**: JWT (HS256)
+- **Хеширование паролей**: bcrypt
+
+## Ограничения текущей версии (MVP)
+
+- Хранение на локальной файловой системе (планируется S3/MinIO)
+- Polling-модель взаимодействия (латентность ~5 сек)
+- Только текстовые логи (без скриншотов/видео)
+- Отсутствие веб-интерфейса
+
+## Roadmap
+
+- [ ] Миграция на S3/MinIO для артефактов
+- [ ] Внедрение брокера сообщений (RabbitMQ/NATS)
+- [ ] Веб-интерфейс для управления
+- [ ] Сохранение скриншотов и видео тестов
+- [ ] Расширение поддерживаемых конфигураций
+- [ ] Метрики и мониторинг (Prometheus/Grafana)
 
 ## Лицензия
 
-MIT
+GNU GENERAL PUBLIC LICENSE Version 3, dated 29 June 2007
