@@ -1,0 +1,17 @@
+[
+    {
+        "description": "",
+        "id": "textItem",
+        "path": "QQuickWindowQmlImpl/QQuickColumnLayout/QQuickText"
+    },
+    {
+        "description": "",
+        "id": "button",
+        "path": "QQuickWindowQmlImpl/QQuickColumnLayout/Button"
+    },
+    {
+        "description": "",
+        "id": "window",
+        "path": "QQuickWindowQmlImpl"
+    }
+]

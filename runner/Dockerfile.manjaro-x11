@@ -1,0 +1,113 @@
+# qtiva-runner:manjaro-qt5.15-x11
+
+# ============================================================
+# Stage 1: Сборка QtAda
+# ============================================================
+FROM manjarolinux/base:latest AS builder
+
+# Устанавливаем build-зависимости
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+    # Build tools
+    base-devel \
+    cmake \
+    git \
+    patchelf \
+    # Qt 5.15 development
+    qt5-base \
+    qt5-declarative \
+    qt5-remoteobjects \
+    qt5-quickcontrols \
+    qt5-quickcontrols2 \
+    && \
+    pacman -Scc --noconfirm
+
+# Клонируем и собираем QtAda
+WORKDIR /build
+RUN git clone --branch dev_qtada_using --depth 1 https://github.com/lildannita/QtAda.git
+WORKDIR /build/QtAda
+RUN bash install.sh --only-cli --skip-symlink --skip-package-install
+
+# Правим пути к библиотекам с помощью patchelf,
+# чтобы qtada и библиотеки искали зависимости рядом с собой
+RUN patchelf --force-rpath --set-rpath '$ORIGIN/../lib' /build/QtAda/build/bin/qtada
+# Для самих библиотек: чтобы их транзитивные зависимости тоже искались рядом
+RUN for f in /build/QtAda/build/libs/libQtAda_*.so*; do \
+      patchelf --force-rpath --set-rpath '$ORIGIN' "$f" || true; \
+    done
+
+# ============================================================
+# Stage 2: Финальный образ
+# ============================================================
+FROM manjarolinux/base:latest
+
+LABEL maintainer="qtiva-cloud"
+LABEL description="Qtiva Runner - Manjaro + Qt 5.15 + X11 (Xvfb) + QtAda"
+
+# Обновляем систему и устанавливаем runtime-зависимости
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+    # Базовые утилиты
+    bash \
+    coreutils \
+    tar \
+    gzip \
+    jq \
+    # Qt 5.15 runtime
+    qt5-base \
+    qt5-declarative \
+    qt5-quickcontrols \
+    qt5-quickcontrols2 \
+    qt5-svg \
+    qt5-graphicaleffects \
+    qt5-x11extras \
+    qt5-remoteobjects \
+    # X11
+    xorg-server-xvfb \
+    xorg-xauth \
+    libx11 \
+    libxcb \
+    xcb-util \
+    xcb-util-image \
+    xcb-util-keysyms \
+    xcb-util-renderutil \
+    xcb-util-wm \
+    # Шрифты
+    ttf-dejavu \
+    # Mesa для software rendering
+    mesa \
+    mesa-utils \
+    # D-Bus
+    dbus \
+    && \
+    # Очистка кэша пакетов
+    pacman -Scc --noconfirm && \
+    rm -rf /var/cache/pacman/pkg/*
+
+# Копируем собранный QtAda из builder stage
+COPY --from=builder /build/QtAda/build/bin/qtada /opt/qtada/bin/qtada
+COPY --from=builder /build/QtAda/build/libs/libQtAda_*.so* /opt/qtada/lib/
+RUN chmod +x /opt/qtada/bin/qtada
+RUN ln -s /opt/qtada/bin/qtada /usr/local/bin/qtada
+
+# Создаём пользователя для запуска тестов
+RUN useradd -m -s /bin/bash qtiva && \
+    mkdir -p /work /artifacts /input && \
+    chown -R qtiva:qtiva /work /artifacts
+
+# Копируем runner скрипт
+COPY runner.sh /qtiva/runner
+RUN chmod +x /qtiva/runner
+
+# Настройка окружения
+ENV HOME=/home/qtiva
+ENV USER=qtiva
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Запуск от пользователя qtiva
+USER qtiva
+WORKDIR /work
+
+# Точка входа
+ENTRYPOINT ["/qtiva/runner"]

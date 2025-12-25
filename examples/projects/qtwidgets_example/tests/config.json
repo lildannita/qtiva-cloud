@@ -1,0 +1,17 @@
+[
+    {
+        "description": "",
+        "id": "label",
+        "path": "Dialog/QLabel"
+    },
+    {
+        "description": "Click to change state",
+        "id": "button",
+        "path": "Dialog/QPushButton"
+    },
+    {
+        "description": "",
+        "id": "dialog",
+        "path": "Dialog"
+    }
+]

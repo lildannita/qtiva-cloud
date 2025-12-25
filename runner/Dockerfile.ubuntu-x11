@@ -1,0 +1,127 @@
+# qtiva-runner:ubuntu-qt5.15-x11
+
+# ============================================================
+# Stage 1: Сборка QtAda
+# ============================================================
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Устанавливаем build-зависимости
+RUN apt-get update && apt-get install -y \
+    # Build tools
+    build-essential \
+    cmake \
+    git \
+    patchelf \
+    # Qt 5.15 development
+    qtbase5-dev \
+    qtbase5-private-dev \
+    qt5-qmltooling-plugins \
+    qtdeclarative5-dev \
+    libqt5remoteobjects5-dev \
+    && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Клонируем и собираем QtAda
+WORKDIR /build
+RUN git clone --branch dev_qtada_using --depth 1 https://github.com/lildannita/QtAda.git
+WORKDIR /build/QtAda
+RUN bash install.sh --only-cli --skip-symlink --skip-package-install
+
+# Правим пути к библиотекам с помощью patchelf,
+# чтобы qtada и библиотеки искали зависимости рядом с собой
+RUN patchelf --force-rpath --set-rpath '$ORIGIN/../lib' /build/QtAda/build/bin/qtada
+# Для самих библиотек: чтобы их транзитивные зависимости тоже искались рядом
+RUN for f in /build/QtAda/build/libs/libQtAda_*.so*; do \
+      patchelf --force-rpath --set-rpath '$ORIGIN' "$f" || true; \
+    done
+
+# ============================================================
+# Stage 2: Финальный образ
+# ============================================================
+FROM ubuntu:22.04
+
+LABEL maintainer="qtiva-cloud"
+LABEL description="Qtiva Runner - Ubuntu 22.04 + Qt 5.15 + X11 (Xvfb) + QtAda"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Устанавливаем runtime-зависимости
+RUN apt-get update && apt-get install -y \
+    # Базовые утилиты
+    bash \
+    coreutils \
+    tar \
+    gzip \
+    jq \
+    # Qt 5.15 runtime
+    libqt5core5a \
+    libqt5gui5 \
+    libqt5widgets5 \
+    libqt5qml5 \
+    libqt5quick5 \
+    libqt5quickcontrols2-5 \
+    libqt5svg5 \
+    libqt5remoteobjects5 \
+    libqt5x11extras5 \
+    qml-module-qtquick2 \
+    qml-module-qtquick-controls2 \
+    qml-module-qtquick-window2 \
+    qml-module-qtquick-layouts \
+    qml-module-qtgraphicaleffects \
+    # X11
+    xvfb \
+    x11-xserver-utils \
+    libx11-6 \
+    libxcb1 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxcb-xinerama0 \
+    libxkbcommon-x11-0 \
+    # Шрифты
+    fonts-dejavu-core \
+    # Mesa для software rendering
+    libgl1-mesa-dri \
+    libgl1-mesa-glx \
+    mesa-utils \
+    # D-Bus
+    dbus \
+    && \
+    # Очистка
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Копируем собранный QtAda из builder stage
+RUN mkdir -p /opt/qtada/bin /opt/qtada/lib
+COPY --from=builder /build/QtAda/build/bin/qtada /opt/qtada/bin/qtada
+COPY --from=builder /build/QtAda/build/libs/libQtAda_*.so* /opt/qtada/lib/
+RUN ln -s /opt/qtada/bin/qtada /usr/local/bin/qtada
+
+# Создаём пользователя для запуска тестов
+RUN useradd -m -s /bin/bash qtiva && \
+    mkdir -p /work /artifacts /input && \
+    chown -R qtiva:qtiva /work /artifacts
+
+# Копируем runner скрипт
+COPY runner.sh /qtiva/runner
+RUN chmod +x /qtiva/runner
+
+# Настройка окружения
+ENV HOME=/home/qtiva
+ENV USER=qtiva
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Запуск от пользователя qtiva
+USER qtiva
+WORKDIR /work
+
+# Точка входа
+ENTRYPOINT ["/qtiva/runner"]
